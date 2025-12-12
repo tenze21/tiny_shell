@@ -3,6 +3,15 @@
 #include "stdbool.h"
 
 #define MAXLEN 100
+#define ECHOLEN 4
+
+static bool check_cmd(char *input, char *cmd){
+  size_t len= strlen(cmd);
+  for(int i=0; i<len; i++){
+    if(input[i] != cmd[i]) return false;
+  }
+  return true;
+}
 
 int main() {
   // Flush after every printf
@@ -19,9 +28,12 @@ int main() {
     //strcspn searches for the first occurance in a string of any of the specified characters and returns the length of the string up to that point.
     input[strcspn(input, "\n")]= '\0';
 
-    if(strcmp(input, "exit")==0) break;
-    
-    printf("%s: command not found\n", input);
+    //termination
+    if(check_cmd(input, "exit")) break;
+
+    // echo implementation
+    if(check_cmd(input, "echo")) printf("%s\n", &input[ECHOLEN + 1]);//print only the string after echo and a space.
+    else printf("%s: command not found\n", input);
   }
   return 0;
 } 
