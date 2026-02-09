@@ -43,12 +43,9 @@ int main() {
 
     //termination
     if(check_cmd(input, "exit")) break;
-
-    // echo implementation
-    if(check_cmd(input, "echo")) 
+    else if(check_cmd(input, "echo")) 
       printf("%s\n", &input[ECHOLEN + 1]);//print only the string after echo and a space.
-
-    if(check_cmd(input, "type")){
+    else if(check_cmd(input, "type")){
       unsigned int i=0;
       while(i<ARRAYLEN(builtin_cmds)){
         if(strcmp(builtin_cmds[i], &input[TYPELEN + 1])==0){
@@ -58,6 +55,8 @@ int main() {
         i++;
         if(i==ARRAYLEN(builtin_cmds)) printf("%s: not found\n", &input[TYPELEN + 1]);
       }
+    }else{
+      printf("%s: command not found\n", input);
     }
   }
   return EXIT_SUCCESS;
