@@ -1,9 +1,15 @@
 #include <stdio.h>
 #include "string.h"
 #include "stdbool.h"
+#include "stdlib.h"
 
+#define ARRAYLEN(A) (sizeof(A)/sizeof(A[0]))
 #define MAXLEN 100
 #define ECHOLEN 4
+#define TYPELEN 4
+
+
+static char *builtin_cmds[]={"echo", "type", "exit"};
 
 static bool check_cmd(char *input, char *cmd){
   size_t len= strlen(cmd);
@@ -11,6 +17,13 @@ static bool check_cmd(char *input, char *cmd){
     if(input[i] != cmd[i]) return false;
   }
   return true;
+}
+
+static bool is_builtin(char *cmd){
+  for(unsigned int i=0; i<ARRAYLEN(builtin_cmds); i++){
+        if(strcmp(builtin_cmds[i], &cmd[TYPELEN + 1])==0) return true;
+  }
+  return false;
 }
 
 int main() {
@@ -29,11 +42,25 @@ int main() {
     input[strcspn(input, "\n")]= '\0';
 
     //termination
-    if(check_cmd(input, "exit")) break;
+    if(check_cmd(input, "exit")) goto exit;
 
     // echo implementation
-    if(check_cmd(input, "echo")) printf("%s\n", &input[ECHOLEN + 1]);//print only the string after echo and a space.
-    else printf("%s: command not found\n", input);
+    if(check_cmd(input, "echo")) 
+      printf("%s\n", &input[ECHOLEN + 1]);//print only the string after echo and a space.
+
+    if(check_cmd(input, "type")){
+      for(unsigned int i=0;i<ARRAYLEN(builtin_cmds); i++){
+        if(strcmp(builtin_cmds[i], &input[TYPELEN + 1])==0){
+          printf("%s is a shell builtin\n", builtin_cmds[i]);
+          goto exit;
+        }
+      }
+      printf("%s: not found\n", &input[TYPELEN + 1]);
+      goto exit;
+    }
   }
-  return 0;
+  exit:
+    return EXIT_SUCCESS;
+
+  return EXIT_SUCCESS;
 } 
