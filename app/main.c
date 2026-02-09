@@ -42,25 +42,23 @@ int main() {
     input[strcspn(input, "\n")]= '\0';
 
     //termination
-    if(check_cmd(input, "exit")) goto exit;
+    if(check_cmd(input, "exit")) break;
 
     // echo implementation
     if(check_cmd(input, "echo")) 
       printf("%s\n", &input[ECHOLEN + 1]);//print only the string after echo and a space.
 
     if(check_cmd(input, "type")){
-      for(unsigned int i=0;i<ARRAYLEN(builtin_cmds); i++){
+      unsigned int i=0;
+      while(i<ARRAYLEN(builtin_cmds)){
         if(strcmp(builtin_cmds[i], &input[TYPELEN + 1])==0){
           printf("%s is a shell builtin\n", builtin_cmds[i]);
-          goto exit;
+          break;
         }
+        i++;
+        if(i==ARRAYLEN(builtin_cmds)) printf("%s: not found\n", &input[TYPELEN + 1]);
       }
-      printf("%s: not found\n", &input[TYPELEN + 1]);
-      goto exit;
     }
   }
-  exit:
-    return EXIT_SUCCESS;
-
   return EXIT_SUCCESS;
 } 
