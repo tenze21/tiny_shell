@@ -13,18 +13,10 @@
 #define MAXCMDLEN 20
 #define ECHOLEN 4
 #define TYPELEN 4
-#define MAXPATHLEN 100
+#define MAXPATHLEN 1024
+#define PATH_SEPERATOR ":"
 
-#ifdef _WIN32
-  #define PATH_SEPERATOR ";"
-  #define SLASH "\\"
-#else
-  #define PATH_SEPERATOR ":"
-  #define SLASH "/"
-#endif
-
-
-static char *builtin_cmds[]={"echo", "type", "exit"};
+static char *builtin_cmds[]={"echo", "type", "exit", "pwd"};
 
 /*
  * Compare the input command with `cmd`
@@ -58,16 +50,9 @@ static char *find_in_path(char *cmd){
   char *path_env=getenv("PATH");
   if(!path_env) return NULL;
   
-  #ifdef _WIN32
-  char *path_ext=getenv("PATHEXT");/*file extension for windows executables*/
-  if(!path_ext) path_ext=".COM;.EXE;.BAT;.CMD";
-  char *ext_cpy=strdup(path_ext);
-  #endif
-  
   char *path_cpy=strdup(path_env);
   char *dir= strtok(path_cpy, PATH_SEPERATOR);
-  #ifndef _WIN32
-    while(dir!=NULL){
+  while(dir!=NULL){
       char full_path[MAXPATHLEN];
       snprintf(full_path, MAXPATHLEN, "%s/%s", dir, cmd);
       if(access(full_path, F_OK | X_OK)==0){
@@ -75,40 +60,8 @@ static char *find_in_path(char *cmd){
         return strdup(full_path);
       }
       dir=strtok(NULL, PATH_SEPERATOR);
-    }
-  #else
-      while(dir!=NULL){
-        char full_path[MAXPATHLEN];
-        snprintf(full_path, MAXPATHLEN, "%s\\%s", dir, cmd);
-        // Try the command as-is first (might already have extension)
-        if(access(full_path, F_OK)){
-          free(path_cpy);
-          free(ext_cpy);
-          return strdup(full_path);
-        }
-
-        char *ext=strtok(ext_cpy, PATH_SEPERATOR);
-        while(ext!=NULL){
-          snprintf(full_path, MAXPATHLEN, "%s\\%s%s", dir, cmd, ext);
-          if(access(full_path, F_OK)==0){
-            free(path_cpy);
-            free(ext_cpy);
-            return strdup(full_path);
-          }
-          ext=strtok(NULL, PATH_SEPERATOR);
-        }
-        /*reset ext_cpy*/
-        free(ext_cpy);
-        ext_cpy=strdup(path_ext);
-
-        dir=strtok(NULL, PATH_SEPERATOR);
-      }
-  #endif
-  
+  }
   free(path_cpy);
-  #ifdef _WIN32
-    free(ext_cpy);
-  #endif
   return NULL;
 }
 
@@ -147,6 +100,13 @@ int main() {
           }
         }
       }
+    }else if(cmp_cmd(input, "pwd")){
+        char current_working_directory[MAXPATHLEN];
+        if(getcwd(current_working_directory, sizeof(current_working_directory))!=NULL){
+            printf("%s\n", current_working_directory);
+        }else{
+            perror("error: failed to get current working directory.\n");
+        }
     }else{
         // Get the command
         char cmd[MAXCMDLEN];
@@ -183,6 +143,7 @@ int main() {
         }else{
             printf("%s: command not found\n", cmd);
         }
+        free(path_to_cmd);
     }
   }
   return EXIT_SUCCESS;
