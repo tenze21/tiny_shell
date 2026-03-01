@@ -66,6 +66,12 @@ static char *find_in_path(char *cmd){
   return NULL;
 }
 
+static void change_dir(char *path){
+    if(chdir(path)!=0){
+        fprintf(stderr, "cd: %s: %s\n", path, strerror(errno));
+    }
+}
+
 int main() {
   // Flush after every printf
   setbuf(stdout, NULL);
@@ -111,8 +117,11 @@ int main() {
     }else if(cmp_cmd(input, "cd")){
         char new_dir[MAXPATHLEN];
         snprintf(new_dir, MAXPATHLEN, "%s", &input[3]);
-        if(chdir(new_dir)!=0){
-            fprintf(stderr, "cd: %s: %s\n", new_dir, strerror(errno));
+        if(strcmp(new_dir, "~")==0){
+            char *path_to_home=getenv("HOME");
+            change_dir(path_to_home);
+        }else{
+            change_dir(new_dir);
         }
     }else{
         // Get the command
