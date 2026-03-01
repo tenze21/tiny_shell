@@ -1,11 +1,16 @@
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include "string.h"
 #include "stdbool.h"
 #include "stdlib.h"
 #include "unistd.h"
+#include "stdint.h"
+#include "sys/wait.h"
 
 #define ARRAYLEN(A) (sizeof(A)/sizeof(A[0]))
 #define MAXINPUTLEN 100
+#define MAXCMDLEN 15
 #define ECHOLEN 4
 #define TYPELEN 4
 #define MAXPATHLEN 100
@@ -21,7 +26,10 @@
 
 static char *builtin_cmds[]={"echo", "type", "exit"};
 
-static bool check_cmd(char *input, char *cmd){
+/*
+ * Compare the input command with `cmd`
+ */
+static bool cmp_cmd(char *input, char *cmd){
   size_t len= strlen(cmd);
   for(int i=0; i<len; i++){
     if(input[i] != cmd[i]) return false;
@@ -29,6 +37,23 @@ static bool check_cmd(char *input, char *cmd){
   return true;
 }
 
+/*
+ * A simple function to count the number of arguments
+ */
+static unsigned int count_args(const char *str){
+    unsigned int count=1;
+    while(*str){
+        if(*str==' ') count++;
+        str++; 
+    }
+    return count;
+}
+
+/*
+ * Look for the provided command in the PATH enviroment variable.
+ * returns a pointer to a string containing the full path to the 
+ * executable or NULL if command isn't in PATH. 
+ */
 static char *find_in_path(char *cmd){
   char *path_env=getenv("PATH");
   if(!path_env) return NULL;
@@ -91,7 +116,6 @@ int main() {
   // Flush after every printf
   setbuf(stdout, NULL);
 
-  
   char input[MAXINPUTLEN];
   while(true){
     printf("$ ");
@@ -100,18 +124,20 @@ int main() {
   
     input[strcspn(input, "\n")]= '\0';
 
-    if(check_cmd(input, "exit")) break;
-    else if(check_cmd(input, "echo")) 
-      printf("%s\n", &input[ECHOLEN + 1]);//print only the string after echo and a space.
-    else if(check_cmd(input, "type")){
+    if(cmp_cmd(input, "exit")) 
+        break;
+    else if(cmp_cmd(input, "echo")) 
+        printf("%s\n", &input[ECHOLEN + 1]);//print only the string after echo and a space.
+    else if(cmp_cmd(input, "type")){
       unsigned int i=0;
       while(i<ARRAYLEN(builtin_cmds)){
+        // Check if command is a builtin shell command
         if(strcmp(builtin_cmds[i], &input[TYPELEN + 1])==0){
           printf("%s is a shell builtin\n", builtin_cmds[i]);
           break;
         }
         i++;
-        if(i==ARRAYLEN(builtin_cmds)){
+        if(i==ARRAYLEN(builtin_cmds)){//check if command is a system executable
           char *path_to_cmd= find_in_path(&input[TYPELEN + 1]);
           if(path_to_cmd==NULL)
             printf("%s: not found\n", &input[TYPELEN + 1]);
@@ -120,12 +146,43 @@ int main() {
             free(path_to_cmd);
           }
         }
-
       }
     }else{
-      printf("%s: command not found\n", input);
+        // Get the command
+        char cmd[MAXCMDLEN];
+        size_t input_cmd_len=strcspn(input, " ");
+        strncpy(cmd, input, input_cmd_len);
+        
+        // Check if command in PATH(is executable)
+        char *path_to_cmd=find_in_path(cmd);
+        
+        if(path_to_cmd != NULL){//execute the system command
+            // Get number of arguments from the input string and store the arguments in a string array(array of pointers to characters)
+            unsigned int args_count=count_args(input);
+            char *args[args_count + 1];
+            char *token=strtok(input, " ");
+            for(int i=0; i<args_count && token!=NULL; i++){
+                args[i]=token;
+                token=strtok(NULL, " ");
+            }
+            args[args_count]=NULL;
+            
+            // Create a child process to execute the system command
+            int id=fork();
+            if(id==-1){
+                perror("error: fork failed");
+                return EXIT_FAILURE;
+            }else if(id==0){
+                execvp(args[0], args);
+                printf("Failed to execute %s\n", path_to_cmd);//only reached on failure
+                _exit(EXIT_FAILURE);
+            }else{
+                wait(NULL);
+            }
+        }else{
+            printf("%s: command not found\n", cmd);
+        }
     }
   }
-    
   return EXIT_SUCCESS;
 } 
