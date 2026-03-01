@@ -10,7 +10,7 @@
 
 #define ARRAYLEN(A) (sizeof(A)/sizeof(A[0]))
 #define MAXINPUTLEN 100
-#define MAXCMDLEN 15
+#define MAXCMDLEN 20
 #define ECHOLEN 4
 #define TYPELEN 4
 #define MAXPATHLEN 100
@@ -152,6 +152,7 @@ int main() {
         char cmd[MAXCMDLEN];
         size_t input_cmd_len=strcspn(input, " ");
         strncpy(cmd, input, input_cmd_len);
+        cmd[input_cmd_len]='\0';
         
         // Check if command in PATH(is executable)
         char *path_to_cmd=find_in_path(cmd);
@@ -173,7 +174,7 @@ int main() {
                 perror("error: fork failed");
                 return EXIT_FAILURE;
             }else if(id==0){
-                execvp(args[0], args);
+                execvp(cmd, args);
                 printf("Failed to execute %s\n", path_to_cmd);//only reached on failure
                 _exit(EXIT_FAILURE);
             }else{
