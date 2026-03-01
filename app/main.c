@@ -1,12 +1,13 @@
+#include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
-#include "string.h"
-#include "stdbool.h"
-#include "stdlib.h"
-#include "unistd.h"
-#include "stdint.h"
-#include "sys/wait.h"
+#include <string.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <stdint.h>
+#include <sys/wait.h>
 
 #define ARRAYLEN(A) (sizeof(A)/sizeof(A[0]))
 #define MAXINPUTLEN 100
@@ -16,7 +17,7 @@
 #define MAXPATHLEN 1024
 #define PATH_SEPERATOR ":"
 
-static char *builtin_cmds[]={"echo", "type", "exit", "pwd"};
+static char *builtin_cmds[]={"echo", "type", "exit", "pwd", "cd"};
 
 /*
  * Compare the input command with `cmd`
@@ -106,6 +107,12 @@ int main() {
             printf("%s\n", current_working_directory);
         }else{
             perror("error: failed to get current working directory.\n");
+        }
+    }else if(cmp_cmd(input, "cd")){
+        char new_dir[MAXPATHLEN];
+        snprintf(new_dir, MAXPATHLEN, "%s", &input[3]);
+        if(chdir(new_dir)!=0){
+            fprintf(stderr, "cd: %s: %s\n", new_dir, strerror(errno));
         }
     }else{
         // Get the command
