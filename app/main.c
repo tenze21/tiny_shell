@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <stdint.h>
 #include <sys/wait.h>
@@ -12,6 +13,8 @@
 #define ARRAYLEN(A) (sizeof(A)/sizeof(A[0]))
 #define MAXINPUTLEN 100
 #define MAXCMDLEN 20
+#define MAXARGSLEN 50
+#define MAXARGS 20
 #define ECHOLEN 4
 #define TYPELEN 4
 #define MAXPATHLEN 1024
@@ -22,12 +25,12 @@ static char *builtin_cmds[]={"echo", "type", "exit", "pwd", "cd"};
 /*
  * Compare the input command with `cmd`
  */
-static bool cmp_cmd(char *input, char *cmd){
-  size_t len= strlen(cmd);
-  for(int i=0; i<len; i++){
-    if(input[i] != cmd[i]) return false;
-  }
-  return true;
+static bool cmp_cmd(const char *input,const char *cmd){
+    if(input==NULL || input[0]=='\0') return false;
+    for(int i=0; input[i]!='\0' && input[i]!=' '; i++){
+        if(input[i] != cmd[i]) return false;
+    }
+    return true;
 }
 
 /*
@@ -47,7 +50,8 @@ static unsigned int count_args(const char *str){
  * returns a pointer to a string containing the full path to the 
  * executable or NULL if command isn't in PATH. 
  */
-static char *find_in_path(char *cmd){
+static char *find_in_path(const char *cmd){
+  if(cmd==NULL || cmd[0]=='\0')return NULL;
   char *path_env=getenv("PATH");
   if(!path_env) return NULL;
   
@@ -66,9 +70,80 @@ static char *find_in_path(char *cmd){
   return NULL;
 }
 
-static void change_dir(char *path){
+static void change_dir(const char *path){
     if(chdir(path)!=0){
         fprintf(stderr, "cd: %s: %s\n", path, strerror(errno));
+    }
+}
+
+/*
+ * remove heading and trailing white spaces.
+ */
+static void trim(char *str){
+    unsigned int len=strlen(str);
+    if(str[len-1]==' ') str[len-1]='\0';
+    if(str[0]==' '){
+        for(int i=1; i<len; i++)
+            str[i-1]=str[i];
+        str[len-1]='\0';
+    }
+}
+
+/*
+ * parse arguments, take all characters in quotes as normal characters and space split arguments
+ * input: argument string entered in shell
+ * argv[]: destination where parsed args are to be written
+ * max_args: maximum number of arguments
+ * @dev elements in argv[] need to be freed
+ */
+static int parse_args(const char *input, char *argv[], int max_args){
+    int argc=0;
+    char buf[MAXARGSLEN];
+    int bufp=0;
+    bool in_quote=false;
+    bool in_token=false;
+    
+    memset(buf, 0, sizeof(buf));
+    for(const char *p=input; *p!='\0' && argc<max_args; p++){
+        if(in_quote){
+            if(*p=='\''){
+                in_quote=false;
+            }else{
+                if(bufp<MAXARGSLEN)
+                    buf[bufp++]=*p;
+            }
+        }else{
+            if(*p=='\''){
+                in_quote=true;
+                in_token=true;
+            }else if(*p==' '){
+                if(in_token){
+                    buf[bufp]='\0';
+                    argv[argc++]=strdup(buf);
+                    bufp=0;
+                    in_token=false;
+                    memset(buf, 0, sizeof(buf));
+                }
+            }else{
+                in_token=true;
+                if(bufp<MAXARGSLEN)
+                    buf[bufp++]=*p;
+            }
+        }
+    }
+    
+    if(in_token || bufp>0){
+        buf[bufp]='\0';
+        argv[argc++]=strdup(buf);
+    }
+    return argc;
+}
+
+static void free_args(char *argv[], const size_t argc){
+    for(size_t i=0; i<argc; i++){
+         if(argv[i]!=NULL){
+             free(argv[i]);
+         }       
     }
 }
 
@@ -76,19 +151,31 @@ int main() {
   // Flush after every printf
   setbuf(stdout, NULL);
 
-  char input[MAXINPUTLEN];
+  char input[MAXINPUTLEN]={'\0'};
+  char *argv[MAXARGS];
   while(true){
     printf("$ ");
   
     fgets(input, sizeof(input), stdin);
-  
     input[strcspn(input, "\n")]= '\0';
-
-    if(cmp_cmd(input, "exit")) 
+    trim(input);
+    int argc=parse_args(&input[strcspn(input, " ") + 1], argv, MAXARGS);
+    if(cmp_cmd(input, "exit"))
+    {
+        free_args(argv, argc);
         break;
-    else if(cmp_cmd(input, "echo")) 
-        printf("%s\n", &input[ECHOLEN + 1]);//print only the string after echo and a space.
-    else if(cmp_cmd(input, "type")){
+    }
+    else if(cmp_cmd(input, "echo"))
+    {
+        for(int i=0; i<argc; i++){
+            if(i>0) printf(" ");
+            printf("%s", argv[i]);
+        }
+        printf("\n");
+        free_args(argv, argc);
+    }
+    else if(cmp_cmd(input, "type"))
+    {
       unsigned int i=0;
       while(i<ARRAYLEN(builtin_cmds)){
         // Check if command is a builtin shell command
@@ -98,23 +185,27 @@ int main() {
         }
         i++;
         if(i==ARRAYLEN(builtin_cmds)){//check if command is a system executable
-          char *path_to_cmd= find_in_path(&input[TYPELEN + 1]);
-          if(path_to_cmd==NULL)
+            char *path_to_cmd= find_in_path(&input[TYPELEN + 1]);
+            if(path_to_cmd==NULL)
             printf("%s: not found\n", &input[TYPELEN + 1]);
-          else{
-            printf("%s is %s\n", &input[TYPELEN + 1], path_to_cmd);
-            free(path_to_cmd);
-          }
+            else{
+                printf("%s is %s\n", &input[TYPELEN + 1], path_to_cmd);
+                free(path_to_cmd);
+            }
         }
       }
-    }else if(cmp_cmd(input, "pwd")){
+    }
+    else if(cmp_cmd(input, "pwd"))
+    {
         char current_working_directory[MAXPATHLEN];
         if(getcwd(current_working_directory, sizeof(current_working_directory))!=NULL){
             printf("%s\n", current_working_directory);
         }else{
             perror("error: failed to get current working directory.\n");
         }
-    }else if(cmp_cmd(input, "cd")){
+    }
+    else if(cmp_cmd(input, "cd"))
+    {
         char new_dir[MAXPATHLEN];
         snprintf(new_dir, MAXPATHLEN, "%s", &input[3]);
         if(strcmp(new_dir, "~")==0){
@@ -123,40 +214,40 @@ int main() {
         }else{
             change_dir(new_dir);
         }
-    }else{
+    }
+    else
+    {
         // Get the command
-        char cmd[MAXCMDLEN];
+        char cmd[MAXCMDLEN]={'\0'};
         size_t input_cmd_len=strcspn(input, " ");
         strncpy(cmd, input, input_cmd_len);
         cmd[input_cmd_len]='\0';
         
+        char *exec_args[MAXARGS + 2];
+        exec_args[0]=cmd;
+        for(int i=0; i<argc; i++)
+            exec_args[i+1]=argv[i];
+        exec_args[argc+1]=NULL;
+        
         // Check if command in PATH(is executable)
         char *path_to_cmd=find_in_path(cmd);
         
-        if(path_to_cmd != NULL){//execute the system command
-            // Get number of arguments from the input string and store the arguments in a string array(array of pointers to characters)
-            unsigned int args_count=count_args(input);
-            char *args[args_count + 1];
-            char *token=strtok(input, " ");
-            for(int i=0; i<args_count && token!=NULL; i++){
-                args[i]=token;
-                token=strtok(NULL, " ");
-            }
-            args[args_count]=NULL;
-            
-            // Create a child process to execute the system command
-            int id=fork();
+        if(path_to_cmd != NULL)//execute the system command
+        {
+            pid_t id=fork();
             if(id==-1){
                 perror("error: fork failed");
                 return EXIT_FAILURE;
             }else if(id==0){
-                execvp(cmd, args);
-                printf("Failed to execute %s\n", path_to_cmd);//only reached on failure
+                execvp(cmd, exec_args);
+                printf("error: failed to execute %s\n", path_to_cmd);
                 _exit(EXIT_FAILURE);
             }else{
                 wait(NULL);
             }
-        }else{
+        }
+        else
+        {
             printf("%s: command not found\n", cmd);
         }
         free(path_to_cmd);
