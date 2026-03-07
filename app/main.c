@@ -94,6 +94,7 @@ static void trim(char *str){
  * input: argument string entered in shell
  * argv[]: destination where parsed args are to be written
  * max_args: maximum number of arguments
+ * returns the number of arguments
  * @dev elements in argv[] need to be freed
  */
 static int parse_args(const char *input, char *argv[], int max_args){
@@ -110,20 +111,18 @@ static int parse_args(const char *input, char *argv[], int max_args){
             if(*p=='\''){
                 in_single_quote=false;
             }else{
-                if(bufp<MAXARGSLEN){
+                if(bufp<MAXARGSLEN - 1)
                     buf[bufp++]=*p;
-                }
             }
         }else if(in_double_quote){
             if(*p=='"'){
                 in_double_quote=false;
             }else{
-                if(bufp<MAXARGSLEN){
-                    if(*p=='\\'){
+                if(bufp<MAXARGSLEN - 1){
+                    if(*p=='\\')
                         buf[bufp++]=*++p;
-                    }else{
+                    else
                         buf[bufp++]=*p;
-                    }
                 }
             }
         }else{
@@ -143,7 +142,7 @@ static int parse_args(const char *input, char *argv[], int max_args){
                 }
             }else{
                 in_token=true;
-                if(bufp<MAXARGSLEN){
+                if(bufp<MAXARGSLEN - 1){
                     if(*p=='\\'){
                         buf[bufp++]=*++p;
                     }else{
@@ -159,6 +158,54 @@ static int parse_args(const char *input, char *argv[], int max_args){
         argv[argc++]=strdup(buf);
     }
     return argc;
+}
+
+/*
+ * parse external commands, important for cases where the program is supplied quoted executables.
+ * input: whole command string passed to the program
+ * cmd: pointer to where the parsed executable is to be written
+ * max_len: maximum length of a executable
+ */
+static void parse_external_cmd(const char *input, char *cmd, const int max_len){
+    bool in_single_quote=false;
+    bool in_double_quote=false;
+    bool in_token=false;
+    int ci=0;
+   for(;*input!='\0' && ci<max_len-1;input++){
+       if(in_single_quote){
+           if(*input=='\'')
+               break;
+           else
+                cmd[ci++]=*input;
+       }else if(in_double_quote){
+           if(*input=='"'){
+               break;
+           }else{
+                if(*input=='\\')
+                    cmd[ci++]=*++input;
+                else
+                    cmd[ci++]=*input;
+           }
+       }else{
+           if(*input=='\''){
+               in_single_quote=true;
+               in_token=true;
+           }else if(*input=='"'){
+               in_double_quote=true;
+               in_token=true;
+           }else if(*input==' '){
+               if(in_token)
+                   break;
+           }else{
+               in_token=true;
+               if(*input=='\\')
+                   cmd[ci++]=*++input;
+               else
+                   cmd[ci++]=*input;
+                   
+           }
+       }
+   }
 }
 
 static void free_args(char *argv[], const size_t argc){
@@ -239,9 +286,7 @@ int main() {
     {
         // Get the command
         char cmd[MAXCMDLEN]={'\0'};
-        size_t input_cmd_len=strcspn(input, " ");
-        strncpy(cmd, input, input_cmd_len);
-        cmd[input_cmd_len]='\0';
+        parse_external_cmd(input, cmd, MAXCMDLEN);
         
         char *exec_args[MAXARGS + 2];
         exec_args[0]=cmd;
