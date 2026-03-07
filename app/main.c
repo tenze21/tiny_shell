@@ -111,11 +111,7 @@ static int parse_args(const char *input, char *argv[], int max_args){
                 in_single_quote=false;
             }else{
                 if(bufp<MAXARGSLEN){
-                    if(*p=='\\'){
-                        buf[bufp++]=*++p;
-                    }else{
-                        buf[bufp++]=*p;
-                    }
+                    buf[bufp++]=*p;
                 }
             }
         }else if(in_double_quote){
