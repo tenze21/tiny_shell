@@ -110,15 +110,25 @@ static int parse_args(const char *input, char *argv[], int max_args){
             if(*p=='\''){
                 in_single_quote=false;
             }else{
-                if(bufp<MAXARGSLEN)
-                    buf[bufp++]=*p;
+                if(bufp<MAXARGSLEN){
+                    if(*p=='\\'){
+                        buf[bufp++]=*++p;
+                    }else{
+                        buf[bufp++]=*p;
+                    }
+                }
             }
         }else if(in_double_quote){
             if(*p=='"'){
                 in_double_quote=false;
             }else{
-                if(bufp<MAXARGSLEN)
-                    buf[bufp++]=*p;
+                if(bufp<MAXARGSLEN){
+                    if(*p=='\\'){
+                        buf[bufp++]=*++p;
+                    }else{
+                        buf[bufp++]=*p;
+                    }
+                }
             }
         }else{
             if(*p=='\''){
@@ -137,8 +147,13 @@ static int parse_args(const char *input, char *argv[], int max_args){
                 }
             }else{
                 in_token=true;
-                if(bufp<MAXARGSLEN)
-                    buf[bufp++]=*p;
+                if(bufp<MAXARGSLEN){
+                    if(*p=='\\'){
+                        buf[bufp++]=*++p;
+                    }else{
+                        buf[bufp++]=*p;
+                    }
+                }
             }
         }
     }
@@ -173,7 +188,6 @@ int main() {
     int argc=parse_args(&input[strcspn(input, " ") + 1], argv, MAXARGS);
     if(cmp_cmd(input, "exit"))
     {
-        free_args(argv, argc);
         break;
     }
     else if(cmp_cmd(input, "echo"))
@@ -183,7 +197,6 @@ int main() {
             printf("%s", argv[i]);
         }
         printf("\n");
-        free_args(argv, argc);
     }
     else if(cmp_cmd(input, "type"))
     {
@@ -263,6 +276,7 @@ int main() {
         }
         free(path_to_cmd);
     }
+    free_args(argv, argc);
   }
   return EXIT_SUCCESS;
 } 
