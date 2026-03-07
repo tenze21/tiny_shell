@@ -106,14 +106,14 @@ static int parse_args(const char *input, char *argv[], int max_args){
     memset(buf, 0, sizeof(buf));
     for(const char *p=input; *p!='\0' && argc<max_args; p++){
         if(in_quote){
-            if(*p=='\''){
+            if(*p=='\'' || *p=='"'){
                 in_quote=false;
             }else{
                 if(bufp<MAXARGSLEN)
                     buf[bufp++]=*p;
             }
         }else{
-            if(*p=='\''){
+            if(*p=='\'' || *p=='"'){
                 in_quote=true;
                 in_token=true;
             }else if(*p==' '){
