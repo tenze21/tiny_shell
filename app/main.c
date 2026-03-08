@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <sys/wait.h>
+#include <fcntl.h>
 
 #define ARRAYLEN(A) (sizeof(A)/sizeof(A[0]))
 #define MAXINPUTLEN 100
@@ -21,17 +22,6 @@
 #define PATH_SEPERATOR ":"
 
 static char *builtin_cmds[]={"echo", "type", "exit", "pwd", "cd"};
-
-/*
- * Compare the input command with `cmd`
- */
-static bool cmp_cmd(const char *input,const char *cmd){
-    if(input==NULL || input[0]=='\0') return false;
-    for(int i=0; input[i]!='\0' && input[i]!=' '; i++){
-        if(input[i] != cmd[i]) return false;
-    }
-    return true;
-}
 
 /*
  * A simple function to count the number of arguments
@@ -171,10 +161,11 @@ static void free_args(char *argv[], const size_t argc){
 int main() {
   // Flush after every printf
   setbuf(stdout, NULL);
-
+  unsigned int is_redirect= false;
   char input[MAXINPUTLEN]={'\0'};
   char *argv[MAXARGS];
   while(true){
+    is_redirect=false;
     printf("$ ");
   
     fgets(input, sizeof(input), stdin);
@@ -182,17 +173,43 @@ int main() {
     trim(input);
     int argc=parse_cmd(input, argv, MAXARGS);
     
+    for(int i=1; i<argc; i++){
+        if(strcmp(argv[i], ">")==0 || strcmp(argv[i], "1>")==0){
+            is_redirect=true;
+            break;
+        } 
+    }
+    
+    int saved_stdout=-1;
+    if(is_redirect){
+        /* open the destination file */
+        int fd=open(argv[argc - 1], O_CREAT | O_TRUNC | O_WRONLY, 0644);
+        if(fd<0){
+            perror("error: couldn't open file");
+            return EXIT_FAILURE;
+        }
+        /*save original STDOUT */
+        saved_stdout=dup(STDOUT_FILENO);
+        /* make file descriptor 1(STDOUT) point to destination file */
+        dup2(fd, STDOUT_FILENO);
+        close(fd);
+    }
+    
     if(strcmp(argv[0], "exit")==0)
     {
         break;
     }
     else if(strcmp(argv[0], "echo")==0)
     {
-        for(int i=1; i<argc; i++){
-            if(i>1) printf(" ");
-            printf("%s", argv[i]);
+        if(is_redirect){/* if STDOUT is redirected */
+            printf("%s", argv[1]);
+        }else{
+            for(int i=1; i<argc; i++){
+                if(i>1) printf(" ");
+                printf("%s", argv[i]);
+            }
+            printf("\n");
         }
-        printf("\n");
     }
     else if(strcmp(argv[0], "type")==0)
     {
@@ -239,9 +256,11 @@ int main() {
     {
         char *exec_args[MAXARGS + 2];
         exec_args[0]=argv[0];
-        for(int i=1; i<argc; i++)
+        int i;
+        for(i=1; i<argc && strcmp(argv[i], ">")!=0 && strcmp(argv[i], "1>")!=0; i++){
             exec_args[i]=argv[i];
-        exec_args[argc]=NULL;
+        }
+        exec_args[i]=NULL;
         
         // Check if command in PATH(is executable)
         char *path_to_cmd=find_in_path(argv[0]);
@@ -255,6 +274,7 @@ int main() {
             }else if(id==0){
                 execvp(argv[0], exec_args);
                 printf("error: failed to execute %s\n", path_to_cmd);
+                fflush(stdout);
                 _exit(EXIT_FAILURE);
             }else{
                 wait(NULL);
@@ -267,6 +287,11 @@ int main() {
         free(path_to_cmd);
     }
     free_args(argv, argc);
+    
+    if(is_redirect){/* restore STDOUT to terminal */
+        dup2(saved_stdout, STDOUT_FILENO);
+        close(saved_stdout);
+    }
   }
   return EXIT_SUCCESS;
 } 
