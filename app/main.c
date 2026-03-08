@@ -208,8 +208,8 @@ int main() {
                 if(i>1) printf(" ");
                 printf("%s", argv[i]);
             }
-            printf("\n");
         }
+        printf("\n");
     }
     else if(strcmp(argv[0], "type")==0)
     {
