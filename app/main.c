@@ -22,7 +22,7 @@
 #define PATH_SEPERATOR ":"
 
 static char *builtin_cmds[]={"echo", "type", "exit", "pwd", "cd"};
-static char *redirect_ops[]={">", ">>", "1>", "2>", "2>>"};
+static char *redirect_ops[]={">", ">>", "1>>", "1>", "2>", "2>>"};
 
 typedef struct{
     char *argv[MAXARGS];
@@ -191,7 +191,7 @@ static int parse_cmd(const char *input, command_t *cmd){
     for(int i=0; i<argc; i++){
         bool is_redirect_out= strcmp(argv[i], ">") ==0 || strcmp(argv[i], "1>") ==0;
         bool is_redirect_err= strcmp(argv[i], "2>") ==0;
-        bool is_out_append= strcmp(argv[i], ">>") ==0;
+        bool is_out_append= strcmp(argv[i], ">>") ==0 || strcmp(argv[i], "1>>") ==0;
         bool is_err_append=strcmp(argv[i], "2>>")==0;
 
         if(is_redirect_out || is_redirect_err || is_err_append || is_out_append){
