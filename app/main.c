@@ -22,6 +22,16 @@
 #define PATH_SEPERATOR ":"
 
 static char *builtin_cmds[]={"echo", "type", "exit", "pwd", "cd"};
+static char *redirect_ops[]={">", ">>", "1>", "2>", "2>>"};
+
+typedef struct{
+    char *argv[MAXARGS];
+    int argc;
+    char *redirect_out;
+    char *redirect_err;
+    bool out_append;
+    bool err_append;
+}command_t;
 
 /*
  * A simple function to count the number of arguments
@@ -30,21 +40,21 @@ static unsigned int count_args(const char *str){
     unsigned int count=1;
     while(*str){
         if(*str==' ') count++;
-        str++; 
+        str++;
     }
     return count;
 }
 
 /*
  * Look for the provided command in the PATH enviroment variable.
- * returns a pointer to a string containing the full path to the 
- * executable or NULL if command isn't in PATH. 
+ * returns a pointer to a string containing the full path to the
+ * executable or NULL if command isn't in PATH.
  */
 static char *find_in_path(const char *cmd){
   if(cmd==NULL || cmd[0]=='\0')return NULL;
   char *path_env=getenv("PATH");
   if(!path_env) return NULL;
-  
+
   char *path_cpy=strdup(path_env);
   char *dir= strtok(path_cpy, PATH_SEPERATOR);
   while(dir!=NULL){
@@ -66,6 +76,16 @@ static void change_dir(const char *path){
     }
 }
 
+static int is_shell_builtin(char *cmd){
+    for(int i=0; i<ARRAYLEN(builtin_cmds); i++){
+      // Check if command is a builtin shell command
+      if(strcmp(builtin_cmds[i], cmd)==0){
+          return i;
+      }
+    }
+    return -1;
+}
+
 /*
  * remove heading and trailing white spaces.
  */
@@ -80,23 +100,20 @@ static void trim(char *str){
 }
 
 /*
- * parse arguments, take all characters in quotes as normal characters and space split arguments
- * input: argument string entered in shell
- * argv[]: destination where parsed args are to be written
- * max_args: maximum number of arguments
- * returns the number of arguments
- * @dev elements in argv[] need to be freed
+ * @dev token input string into seperate command arguments.
+ *
+ * writes each command token to argv.
  */
-static int parse_cmd(const char *input, char *argv[], int max_args){
+static int tokenize_cmd(const char *input, char *argv[]){
     int argc=0;
     char buf[MAXARGSLEN];
     int bufp=0;
     bool in_single_quote=false;
     bool in_double_quote=false;
     bool in_token=false;
-    
+
     memset(buf, 0, sizeof(buf));
-    for(const char *p=input; *p!='\0' && argc<max_args; p++){
+    for(const char *p=input; *p!='\0' && argc<MAXARGS; p++){
         if(in_single_quote){
             if(*p=='\''){
                 in_single_quote=false;
@@ -142,97 +159,159 @@ static int parse_cmd(const char *input, char *argv[], int max_args){
             }
         }
     }
-    
+
     if(in_token || bufp>0){
         buf[bufp]='\0';
         argv[argc++]=strdup(buf);
     }
+    argv[argc]=NULL;
     return argc;
+}
+
+static bool is_redirect_op(char *token){
+    for(int i=0; i<ARRAYLEN(redirect_ops); i++){
+        if(strcmp(token, redirect_ops[i])==0) return true;
+    }
+    return false;
+}
+
+/*
+ * @dev parse tokenized input string into the `command_t` structure.
+ */
+static int parse_cmd(const char *input, command_t *cmd){
+    char *argv[MAXARGS];
+    int argc= tokenize_cmd(input, argv);
+
+    cmd->argc=0;
+    cmd->out_append=false;
+    cmd->err_append=false;
+    cmd->redirect_out=NULL;
+    cmd->redirect_err=NULL;
+
+    for(int i=0; i<argc; i++){
+        bool is_redirect_out= strcmp(argv[i], ">") ==0 || strcmp(argv[i], "1>") ==0;
+        bool is_redirect_err= strcmp(argv[i], "2>") ==0;
+        bool is_out_append= strcmp(argv[i], ">>") ==0;
+        bool is_err_append=strcmp(argv[i], "2>>")==0;
+
+        if(is_redirect_out || is_redirect_err || is_err_append || is_out_append){
+            if(i+1>=argc){/*No output file*/
+                fprintf(stderr, "tShell: Syntax error near unexpected token 'newline'\n");
+                return -1;
+            }
+
+            if(is_redirect_op(argv[i+1])){/*consecutive redirects*/
+                fprintf(stderr, "tShell: Syntax error near unexpected token '%s'\n", argv[i+1]);
+                return -1;
+            }
+
+            cmd->out_append=is_out_append;
+            cmd->err_append=is_err_append;
+            
+            if(is_redirect_out || is_out_append)
+                cmd->redirect_out=argv[i+1];
+            if(is_redirect_err || is_err_append)
+                cmd->redirect_err=argv[i+1];
+            i++;
+        }else{
+            cmd->argv[cmd->argc++]=argv[i];
+        }
+    }
+    cmd->argv[cmd->argc]=NULL;
+    return 0;
+}
+
+static int apply_redirects(command_t *cmd, int *saved_stdout, int *saved_stderr){
+    if(cmd->redirect_out!=NULL){
+        int flags=O_CREAT | O_WRONLY | (cmd->out_append? O_APPEND : O_TRUNC);
+        int fd_out=open(cmd->redirect_out, flags, 0644);
+        if(fd_out<0){
+            perror("error: couldn't open file");
+            return -1;
+        }
+        *saved_stdout=dup(STDOUT_FILENO);
+        dup2(fd_out, STDOUT_FILENO);
+        close(fd_out);
+    }
+    if(cmd->redirect_err!=NULL){
+        int flags=O_CREAT | O_WRONLY | (cmd->err_append? O_APPEND : O_TRUNC);
+        int fd_err=open(cmd->redirect_err, flags, 0644);
+        if(fd_err<0){
+            perror("error: couldn't open file");
+            return -1;
+        }
+        *saved_stderr=dup(STDERR_FILENO);
+        dup2(fd_err, STDERR_FILENO);
+        close(fd_err);
+    }
+    return 0;
+}
+
+static void restore_redirects(int saved_out, int saved_err){
+    if(saved_out>=0){
+        dup2(saved_out, STDOUT_FILENO);
+        close(saved_out);
+    }
+    if(saved_err>=0){
+        dup2(saved_err, STDERR_FILENO);
+        close(saved_err);
+    }
 }
 
 static void free_args(char *argv[], const size_t argc){
     for(size_t i=0; i<argc; i++){
          if(argv[i]!=NULL){
              free(argv[i]);
-         }       
+         }
     }
 }
 
-int main() {
-  // Flush after every printf
-  setbuf(stdout, NULL);
-  unsigned int is_redirect= false;
-  char input[MAXINPUTLEN]={'\0'};
-  char *argv[MAXARGS];
+int main(void) {
   while(true){
-    is_redirect=false;
+    // Flush after every printf
+    setbuf(stdout, NULL);
+    char input[MAXINPUTLEN]={'\0'};
+    command_t cmd={0};
     printf("$ ");
-  
+
     fgets(input, sizeof(input), stdin);
     input[strcspn(input, "\n")]= '\0';
     trim(input);
-    int argc=parse_cmd(input, argv, MAXARGS);
     
-    for(int i=1; i<argc; i++){
-        if(strcmp(argv[i], ">")==0 || strcmp(argv[i], "1>")==0){
-            is_redirect=true;
-            break;
-        } 
-    }
-    
+    if(parse_cmd(input, &cmd)<0) continue;
+
     int saved_stdout=-1;
-    if(is_redirect){
-        /* open the destination file */
-        int fd=open(argv[argc - 1], O_CREAT | O_TRUNC | O_WRONLY, 0644);
-        if(fd<0){
-            perror("error: couldn't open file");
-            return EXIT_FAILURE;
-        }
-        /*save original STDOUT */
-        saved_stdout=dup(STDOUT_FILENO);
-        /* make file descriptor 1(STDOUT) point to destination file */
-        dup2(fd, STDOUT_FILENO);
-        close(fd);
-    }
-    
-    if(strcmp(argv[0], "exit")==0)
+    int saved_stderr=-1;
+    if(apply_redirects(&cmd, &saved_stdout, &saved_stderr)<0) continue;
+
+    if(strcmp(cmd.argv[0], "exit")==0)
     {
         break;
     }
-    else if(strcmp(argv[0], "echo")==0)
+    else if(strcmp(cmd.argv[0], "echo")==0)
     {
-        if(is_redirect){/* if STDOUT is redirected */
-            printf("%s", argv[1]);
-        }else{
-            for(int i=1; i<argc; i++){
-                if(i>1) printf(" ");
-                printf("%s", argv[i]);
-            }
+        for(int i=1; i<cmd.argc; i++){
+            if(i>1) printf(" ");
+            printf("%s", cmd.argv[i]);
         }
         printf("\n");
     }
-    else if(strcmp(argv[0], "type")==0)
+    else if(strcmp(cmd.argv[0], "type")==0)
     {
-      unsigned int i=0;
-      while(i<ARRAYLEN(builtin_cmds)){
-        // Check if command is a builtin shell command
-        if(strcmp(builtin_cmds[i], argv[1])==0){
-          printf("%s is a shell builtin\n", builtin_cmds[i]);
-          break;
-        }
-        i++;
-        if(i==ARRAYLEN(builtin_cmds)){//check if command is a system executable
-            char *path_to_cmd= find_in_path(argv[1]);
+        int idx=is_shell_builtin(cmd.argv[1]);
+        if(idx>=0){
+          printf("%s is a shell builtin\n", builtin_cmds[idx]);
+        }else{
+            char *path_to_cmd= find_in_path(cmd.argv[1]);
             if(path_to_cmd==NULL)
-            printf("%s: not found\n", argv[1]);
+                printf("%s: not found\n", cmd.argv[1]);
             else{
-                printf("%s is %s\n", argv[1], path_to_cmd);
+                printf("%s is %s\n", cmd.argv[1], path_to_cmd);
                 free(path_to_cmd);
             }
         }
-      }
     }
-    else if(strcmp(argv[0], "pwd")==0)
+    else if(strcmp(cmd.argv[0], "pwd")==0)
     {
         char current_working_directory[MAXPATHLEN];
         if(getcwd(current_working_directory, sizeof(current_working_directory))!=NULL){
@@ -241,10 +320,10 @@ int main() {
             perror("error: failed to get current working directory.\n");
         }
     }
-    else if(strcmp(argv[0], "cd")==0)
+    else if(strcmp(cmd.argv[0], "cd")==0)
     {
         char new_dir[MAXPATHLEN];
-        snprintf(new_dir, MAXPATHLEN, "%s", argv[1]);
+        snprintf(new_dir, MAXPATHLEN, "%s",cmd.argv[1]);
         if(strcmp(new_dir, "~")==0){
             char *path_to_home=getenv("HOME");
             change_dir(path_to_home);
@@ -254,17 +333,8 @@ int main() {
     }
     else
     {
-        char *exec_args[MAXARGS + 2];
-        exec_args[0]=argv[0];
-        int i;
-        for(i=1; i<argc && strcmp(argv[i], ">")!=0 && strcmp(argv[i], "1>")!=0; i++){
-            exec_args[i]=argv[i];
-        }
-        exec_args[i]=NULL;
-        
-        // Check if command in PATH(is executable)
-        char *path_to_cmd=find_in_path(argv[0]);
-        
+        char *path_to_cmd=find_in_path(cmd.argv[0]);
+
         if(path_to_cmd != NULL)//execute the system command
         {
             pid_t id=fork();
@@ -272,8 +342,8 @@ int main() {
                 perror("error: fork failed");
                 return EXIT_FAILURE;
             }else if(id==0){
-                execvp(argv[0], exec_args);
-                printf("error: failed to execute %s\n", path_to_cmd);
+                execvp(cmd.argv[0], cmd.argv);
+                fprintf(stderr, "error: failed to execute %s\n", path_to_cmd);
                 fflush(stdout);
                 _exit(EXIT_FAILURE);
             }else{
@@ -282,16 +352,13 @@ int main() {
         }
         else
         {
-            printf("%s: command not found\n", argv[0]);
+            fprintf(stderr, "%s: command not found\n", cmd.argv[0]);
         }
         free(path_to_cmd);
     }
-    free_args(argv, argc);
-    
-    if(is_redirect){/* restore STDOUT to terminal */
-        dup2(saved_stdout, STDOUT_FILENO);
-        close(saved_stdout);
-    }
+    free_args(cmd.argv, cmd.argc);
+
+    restore_redirects(saved_stdout, saved_stderr);
   }
   return EXIT_SUCCESS;
-} 
+}
