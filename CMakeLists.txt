@@ -6,6 +6,9 @@ file(GLOB_RECURSE SOURCE_FILES src/*.c src/*.h)
 
 set(CMAKE_C_STANDARD 23) # Enable the C23 standard
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(READLINE REQUIRED readline)
+
 add_executable(shell ${SOURCE_FILES})
 
-target_link_libraries(shell PRIVATE readline)
+target_link_libraries(shell PRIVATE ${READLINE_LIBRARIES})
