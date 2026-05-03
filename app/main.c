@@ -1,18 +1,14 @@
-#include <errno.h>
-#include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include <sys/types.h>
-#include <time.h>
 #include <unistd.h>
-#include <stdint.h>
-#include <sys/wait.h>
 #include <fcntl.h>
 #include <readline/readline.h>
 #include <readline/history.h>
+
+#include "commands.h"
+#include "utils.h"
 
 #define ARRAYLEN(A) (sizeof(A)/sizeof(A[0]))
 #define MAXINPUTLEN 100
@@ -22,11 +18,9 @@
 #define ECHOLEN 4
 #define TYPELEN 4
 #define MAXPATHLEN 1024
-#define PATH_SEPERATOR ":"
 
 static const char *builtin_cmds[]={"echo", "type", "exit", "pwd", "cd", NULL};
 static const char *redirect_ops[]={">", ">>", "1>>", "1>", "2>", "2>>", NULL};
-
 typedef struct{
     char *argv[MAXARGS];
     int argc;
@@ -35,74 +29,6 @@ typedef struct{
     bool out_append;
     bool err_append;
 }command_t;
-
-/*
- * A simple function to count the number of arguments
- */
-static unsigned int count_args(const char *str){
-    unsigned int count=1;
-    while(*str){
-        if(*str==' ') count++;
-        str++;
-    }
-    return count;
-}
-
-/*
- * Look for the provided command in the PATH enviroment variable.
- * returns a pointer to a string containing the full path to the
- * executable or NULL if command isn't in PATH.
- */
-static char *find_in_path(const char *cmd){
-  if(cmd==NULL || cmd[0]=='\0')return NULL;
-  char *path_env=getenv("PATH");
-  if(!path_env) return NULL;
-
-  char *path_cpy=strdup(path_env);
-  char *dir= strtok(path_cpy, PATH_SEPERATOR);
-  while(dir!=NULL){
-      char full_path[MAXPATHLEN];
-      snprintf(full_path, MAXPATHLEN, "%s/%s", dir, cmd);
-      if(access(full_path, F_OK | X_OK)==0){
-        free(path_cpy);
-        return strdup(full_path);
-      }
-      dir=strtok(NULL, PATH_SEPERATOR);
-  }
-  free(path_cpy);
-  return NULL;
-}
-
-static void change_dir(const char *path){
-    if(chdir(path)!=0){
-        fprintf(stderr, "cd: %s: %s\n", path, strerror(errno));
-    }
-}
-
-static bool is_shell_builtin(char *cmd){
-    int idx=0;
-    const char *builtin;
-    while((builtin= builtin_cmds[idx++]) != NULL){
-      // Check if command is a builtin shell command
-      if(strcmp(builtin, cmd)==0){
-          return true;
-      }
-    }
-    return false;
-}
-
-/*
- * remove heading and trailing white spaces.
- */
-static void trim(char *str){
-    unsigned int len=strlen(str);
-    if(str[len-1]==' ') str[len-1]='\0';
-    if(str[0]==' '){
-        for(int i=1; i<len; i++)
-            str[i-1]=str[i];
-        str[len-1]='\0';
-    }
-}
 
 /*
  * @dev tokenize input string into seperate command arguments.
@@ -339,70 +265,23 @@ int main(void) {
         }
         else if(strcmp(cmd.argv[0], "echo")==0)
         {
-            for(int i=1; i<cmd.argc; i++){
-                if(i>1) printf(" ");
-                printf("%s", cmd.argv[i]);
-            }
-            printf("\n");
+            echo(&cmd.argv[1]);
         }
         else if(strcmp(cmd.argv[0], "type")==0)
         {
-            if(is_shell_builtin(cmd.argv[1])){
-                printf("%s is a shell builtin\n", cmd.argv[1]);
-            }else{
-                char *path_to_cmd= find_in_path(cmd.argv[1]);
-                if(path_to_cmd==NULL)
-                    printf("%s: not found\n", cmd.argv[1]);
-                else{
-                    printf("%s is %s\n", cmd.argv[1], path_to_cmd);
-                    free(path_to_cmd);
-                }
-            }
+            type(cmd.argv[1], builtin_cmds);
         }
         else if(strcmp(cmd.argv[0], "pwd")==0)
         {
-            char current_working_directory[MAXPATHLEN];
-            if(getcwd(current_working_directory, sizeof(current_working_directory))!=NULL){
-                printf("%s\n", current_working_directory);
-            }else{
-                perror("error: failed to get current working directory.\n");
-            }
+            pwd();
         }
         else if(strcmp(cmd.argv[0], "cd")==0)
         {
-            char new_dir[MAXPATHLEN];
-            snprintf(new_dir, MAXPATHLEN, "%s",cmd.argv[1]);
-            if(strcmp(new_dir, "~")==0){
-                char *path_to_home=getenv("HOME");
-                change_dir(path_to_home);
-            }else{
-                change_dir(new_dir);
-            }
+            cd(cmd.argv[1]);
         }
         else
         {
-            char *path_to_cmd=find_in_path(cmd.argv[0]);
-    
-            if(path_to_cmd != NULL)//execute the system command
-            {
-                pid_t id=fork();
-                if(id==-1){
-                    perror("error: fork failed");
-                    return EXIT_FAILURE;
-                }else if(id==0){
-                    execv(path_to_cmd, cmd.argv);
-                    fprintf(stderr, "error: failed to execute %s\n", path_to_cmd);
-                    fflush(stdout);
-                    _exit(EXIT_FAILURE);
-                }else{
-                    wait(NULL);
-                }
-            }
-            else
-            {
-                fprintf(stderr, "%s: command not found\n", cmd.argv[0]);
-            }
-            free(path_to_cmd);
+            exec(cmd.argv[0], cmd.argv);
         }
         free_args(cmd.argv, cmd.argc);
     
