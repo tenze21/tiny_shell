@@ -1,5 +1,6 @@
 #ifndef UTILS_H
 #define UTILS_H
+#include <stdbool.h>
 
 /**
  * @brief check if `cmd` is shell builtin(i.e., present in `builtins[]`)
