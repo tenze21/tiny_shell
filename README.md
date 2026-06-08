@@ -10,3 +10,8 @@ To discuss this let's go back to before I learned C. I started programming 2 yea
 - Support for escaping characters with backslash
 - Executing external programs like `git`.
 - Redirecting `stdout` and `stderr`.  
+- Autocompletion for both builtin commands and external commands using readline.
+
+## Usage
+To use the **tinyShell** just execute it by running the `your_program.sh` script as `./your_program.sh` in your bash terminal, and just interact with it like you would with the bash shell.
+> One thing to note is that you need to install readline to try out tinyShell just install it as `sudo dnf install readline-devel` or `sudo apt install libreadline-dev` 
