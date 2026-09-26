@@ -1,18 +1,13 @@
-#include <stdlib.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <string.h>
-
 #include "utils.h"
 
 #define MAXPATHLEN 1024
 #define PATH_SEPERATOR ":"
 
-bool is_shell_builtin(const char *cmd, const char *builtins[])
+bool is_shell_builtin(const char *cmd)
 {
   int idx = 0;
   const char *builtin;
-  while ((builtin = builtins[idx++]) != NULL)
+  while ((builtin = builtin_cmds[idx++]) != NULL)
   {
     if (strcmp(builtin, cmd) == 0)
       return true;
@@ -48,4 +43,100 @@ void trim(char *str){
             str[i-1]=str[i];
         str[len-1]='\0';
     }
+}
+
+/*
+ * @dev tokenize input string into seperate command arguments.
+ *
+ * writes each command token to argv.
+ */
+int tokenize_cmd(const char *input, char *argv[])
+{
+    int argc = 0;
+    char buf[MAXARGSLEN];
+    int bufp = 0;
+    bool in_single_quote = false;
+    bool in_double_quote = false;
+    bool in_token = false;
+
+    memset(buf, 0, sizeof(buf));
+    for (const char *p = input; *p != '\0' && argc < MAXARGS; p++)
+    {
+        if (in_single_quote)
+        {
+            if (*p == '\'')
+            {
+                in_single_quote = false;
+            }
+            else
+            {
+                if (bufp < MAXARGSLEN - 1)
+                    buf[bufp++] = *p;
+            }
+        }
+        else if (in_double_quote)
+        {
+            if (*p == '"')
+            {
+                in_double_quote = false;
+            }
+            else
+            {
+                if (bufp < MAXARGSLEN - 1)
+                {
+                    if (*p == '\\')
+                        buf[bufp++] = *++p;
+                    else
+                        buf[bufp++] = *p;
+                }
+            }
+        }
+        else
+        {
+            if (*p == '\'')
+            {
+                in_single_quote = true;
+                in_token = true;
+            }
+            else if (*p == '"')
+            {
+                in_double_quote = true;
+                in_token = true;
+            }
+            else if (*p == ' ')
+            {
+                if (in_token)
+                {
+                    buf[bufp] = '\0';
+                    argv[argc++] = strdup(buf);
+                    bufp = 0;
+                    in_token = false;
+                    memset(buf, 0, sizeof(buf));
+                }
+            }
+            else
+            {
+                in_token = true;
+                if (bufp < MAXARGSLEN - 1)
+                {
+                    if (*p == '\\')
+                    {
+                        buf[bufp++] = *++p;
+                    }
+                    else
+                    {
+                        buf[bufp++] = *p;
+                    }
+                }
+            }
+        }
+    }
+
+    if (in_token || bufp > 0)
+    {
+        buf[bufp] = '\0';
+        argv[argc++] = strdup(buf);
+    }
+    argv[argc] = NULL;
+    return argc;
 }

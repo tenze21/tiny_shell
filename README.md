@@ -14,4 +14,18 @@ To discuss this let's go back to before I learned C. I started programming 2 yea
 
 ## Usage
 To use the **tinyShell** just execute it by running the `your_program.sh` script as `./your_program.sh` in your bash terminal, and just interact with it like you would with the bash shell.
-> One thing to note is that you need to install readline to try out tinyShell just install it as `sudo dnf install readline-devel` or `sudo apt install libreadline-dev` 
+> One thing to note is that you need to install readline to try out tinyShell just install it as `sudo dnf install readline-devel` or `sudo apt install libreadline-dev`
+
+## Shortcuts
+Since tinyShell uses readline underneath for line editing you can use the shorcuts provided by readline in tinyShell:
+- `CTRL+b`: Move backward one character.
+- `CTRL+f`: Move forward one character.
+- `ALT+f`: Move forward a word.
+- `ALT+b`: Move backward a word.
+- `CTRL+d`: Delete the character underneath the cursor.
+- `CTRL+l`: Clear the screen, reprinting the current line at the top.
+- `CTRL+k`: cut the text from the current cursor position to the end of the line.
+- `ALT+d`: cut from the cursor to the end of the current word, or, if between words, to the end of the next word.
+- `CTRL+w`: cut from the cursor to the previous whitespace. This is different than M-DEL because the word boundaries differ.
+- `CTRL+y`: Paste the most recently cut text back into the buffer at the cursor.
+- `ALT+y`: Rotate through the texts perviously cut, and paste the new top. You can only do this if the prior command is `CTRL+y` or `ALT-y`.
