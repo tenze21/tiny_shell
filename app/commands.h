@@ -29,6 +29,11 @@ void pwd(void);
 void cd(char *dir);
 
 /**
+ * @brief list shell history
+*/
+void history(char *arg);
+
+/**
  * @brief execute external commands 
  * @param cmd command to execute
  * @returns 0 on success, -1 on failure

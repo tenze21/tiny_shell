@@ -119,6 +119,9 @@ static void execute(command_t cmd)
     {
         pwd();
     }
+    else if(strcmp(cmd.argv[0], "history") == 0){
+        history(cmd.argv[1]);
+    }
     else
     {
         char *path_to_cmd = find_in_path(cmd.argv[0]);

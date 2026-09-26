@@ -18,7 +18,7 @@
 #define MAXARGSLEN 50
 #define MAXARGS 20
 
-static const char *builtin_cmds[] = {"echo", "type", "exit", "pwd", "cd", NULL};
+static const char *builtin_cmds[] = {"echo", "type", "exit", "pwd", "cd", "history", NULL};
 static const char *redirect_ops[] = {">", ">>", "1>>", "1>", "2>", "2>>", NULL};
 
 typedef struct command

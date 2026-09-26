@@ -4,6 +4,7 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/types.h>
+#include <readline/history.h>
 
 #include "commands.h"
 #include "utils.h"
@@ -80,6 +81,37 @@ void cd(char *dir)
       fprintf(stderr, "cd: %s: %s\n", new_dir, strerror(errno));
     }
   }
+}
+
+void history(char *arg)
+{
+    HIST_ENTRY **hist_list = history_list();
+    int limit = 0;
+
+    if (arg != NULL)
+    {
+        if (strcmp(arg, "-c") == 0)
+        {
+            clear_history();
+            _exit(EXIT_SUCCESS);
+        }
+        else if (atoi(arg) > 0)
+        {
+            limit = atoi(arg);
+        }
+    }
+
+    if (hist_list != NULL)
+    {
+        int total = 0;
+        while (hist_list[total] != NULL) total++;   // count entries first
+
+        int start = (limit > 0 && limit < total) ? total - limit : 0;
+
+        for (int i = start; i < total; ++i)
+            printf("%5d  %s\n", i + history_base, hist_list[i]->line);
+    }
+    _exit(EXIT_SUCCESS);
 }
 
 void exec_external(char *path_to_cmd, char *args[])
