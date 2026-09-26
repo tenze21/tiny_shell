@@ -92,8 +92,7 @@ void history(char *arg)
     {
         if (strcmp(arg, "-c") == 0)
         {
-            clear_history();
-            _exit(EXIT_SUCCESS);
+          clear_history();
         }
         else if (atoi(arg) > 0)
         {
@@ -111,7 +110,6 @@ void history(char *arg)
         for (int i = start; i < total; ++i)
             printf("%5d  %s\n", i + history_base, hist_list[i]->line);
     }
-    _exit(EXIT_SUCCESS);
 }
 
 void exec_external(char *path_to_cmd, char *args[])

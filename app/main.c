@@ -119,9 +119,6 @@ static void execute(command_t cmd)
     {
         pwd();
     }
-    else if(strcmp(cmd.argv[0], "history") == 0){
-        history(cmd.argv[1]);
-    }
     else
     {
         char *path_to_cmd = find_in_path(cmd.argv[0]);
@@ -397,6 +394,11 @@ int main(void)
         else if (strcmp(pipeline.cmds[0].argv[0], "cd") == 0)
         {
             cd(pipeline.cmds[0].argv[1]);
+            continue;
+        }
+        else if (strcmp(pipeline.cmds[0].argv[0], "history") == 0)
+        {
+            history(pipeline.cmds[0].argv[1]);
             continue;
         }
 
