@@ -11,6 +11,8 @@ To discuss this let's go back to before I learned C. I started programming 2 yea
 - Executing external programs like `git`.
 - Redirecting `stdout` and `stderr`.  
 - Autocompletion for both builtin commands and external commands using readline.
+- Pipe multiple commands
+- View and clear history
 
 ## Usage
 To use the **tinyShell** just execute it by running the `your_program.sh` script as `./your_program.sh` in your bash terminal, and just interact with it like you would with the bash shell.
